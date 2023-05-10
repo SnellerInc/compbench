@@ -1,0 +1,7 @@
+github.com/SnellerInc/sneller v0.0.0-20230509161813-4ff1072fc85f h1:yq0VrW1VpYDCOf1DEXB957OlrfZKepkbdZ/PwuNMl1c=
+github.com/SnellerInc/sneller v0.0.0-20230509161813-4ff1072fc85f/go.mod h1:BaisUxgu4MI9tL6dwYPccGKsXkBP7+BnMz8fL/F/TNk=
+github.com/klauspost/compress v1.16.5 h1:IFV2oUNUzZaz+XyusxpLzpzS8Pt5rh0Z16For/djlyI=
+golang.org/x/exp v0.0.0-20230425010034-47ecfdc1ba53 h1:5llv2sWeaMSnA3w2kS57ouQQ4pudlXrR0dCgw51QK9o=
+golang.org/x/exp v0.0.0-20230425010034-47ecfdc1ba53/go.mod h1:V1LtkGg67GoY2N1AnLN78QLrzxkLyJw7RJb1gzOOz9w=
+golang.org/x/sys v0.7.0 h1:3jlCCIQZPdOYu1h8BkNvLz8Kgwtae2cagcG/VamtZRU=
+golang.org/x/sys v0.7.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
