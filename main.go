@@ -206,7 +206,6 @@ func fatalf(f string, args ...any) {
 }
 
 var dashv bool
-var dashname string
 
 func logf(f string, args ...any) {
 	if dashv {
@@ -215,8 +214,11 @@ func logf(f string, args ...any) {
 }
 
 func main() {
+	var dashname string
+	var dashfile string
 	flag.BoolVar(&dashv, "v", false, "verbose")
 	flag.StringVar(&dashname, "name", "", "regex for compressors to run (or empty for all)")
+	flag.StringVar(&dashfile, "f", "", "file to benchmark (default: internal silesia.tar corpus)")
 	flag.Parse()
 
 	var rx *regexp.Regexp
@@ -228,15 +230,24 @@ func main() {
 		}
 	}
 
-	r, err := gzip.NewReader(bytes.NewReader(silesia))
-	if err != nil {
-		fatalf("unzipping silesia data: %s", err)
+	var buf []byte
+	var err error
+	if dashfile != "" {
+		buf, err = os.ReadFile(dashfile)
+		if err != nil {
+			fatalf("reading -f=%q: %s", dashfile, err)
+		}
+	} else {
+		r, err := gzip.NewReader(bytes.NewReader(silesia))
+		if err != nil {
+			fatalf("unzipping silesia data: %s", err)
+		}
+		buf, err = io.ReadAll(r)
+		if err != nil {
+			fatalf("unzipping silesia data: %s", err)
+		}
+		r.Close()
 	}
-	buf, err := io.ReadAll(r)
-	if err != nil {
-		fatalf("unzipping silesia data: %s", err)
-	}
-	r.Close()
 
 	fmt.Println("name, ratio, decompression speed (GiB/s)")
 	for i := range compressors {
