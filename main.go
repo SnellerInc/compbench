@@ -37,7 +37,7 @@ type compressor struct {
 	name       string
 	avail      func() bool
 	compress   func([]byte) []byte
-	decompress func([]byte)
+	decompress func(src []byte, deadline time.Time) int
 }
 
 const iguanaWindowSize = 256 * 1024
@@ -70,35 +70,72 @@ func iguanaCompress(src []byte, ans bool) []byte {
 	return out
 }
 
-func iguanaDecompress(src []byte) {
+func iguanaDecompress(src []byte, deadline time.Time) int {
 	var tmp []byte
 	var err error
 	var dec iguana.Decoder
-	for len(src) >= 4 {
-		winsize := int(src[0]) + (int(src[1]) << 8) + (int(src[2]) << 16)
-		src = src[3:]
-		if len(src) < winsize {
-			panic("invalid frame")
+	iters := 0
+	for time.Now().Before(deadline) {
+		src := src
+		for len(src) >= 4 {
+			winsize := int(src[0]) + (int(src[1]) << 8) + (int(src[2]) << 16)
+			src = src[3:]
+			if len(src) < winsize {
+				panic("invalid frame")
+			}
+			mem := src[:winsize]
+			src = src[winsize:]
+			tmp, err = dec.DecompressTo(tmp[:0], mem)
+			if err != nil {
+				panic(err)
+			}
 		}
-		mem := src[:winsize]
-		src = src[winsize:]
-		tmp, err = dec.DecompressTo(tmp[:0], mem)
-		if err != nil {
-			panic(err)
-		}
+		iters++
 	}
+	return iters
 }
 
-func decompressCmdline(args ...string) func([]byte) {
-	return func(src []byte) {
+// corpusReader is an io.Reader
+// that is used as stdin for the external decompressors;
+// we want to feed the compressed corpus data to the subprocess
+// continuously so as to eliminate any exec overhead
+type corpusReader struct {
+	src      []byte
+	deadline time.Time
+	iters    int
+}
+
+func (c *corpusReader) Read(p []byte) (int, error) {
+	// the os package will always end up using the WriterTo implementation
+	panic("unexpected")
+	return 0, fmt.Errorf("uh oh")
+}
+
+func (c *corpusReader) WriteTo(w io.Writer) (int64, error) {
+	nn := int64(0)
+	for time.Now().Before(c.deadline) {
+		n, err := w.Write(c.src)
+		c.iters++
+		nn += int64(n)
+		if err != nil {
+			return nn, err
+		}
+	}
+	return nn, nil
+}
+
+func decompressCmdline(args ...string) func([]byte, time.Time) int {
+	return func(src []byte, deadline time.Time) int {
 		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Stdin = bytes.NewReader(src)
+		cr := &corpusReader{src: src, deadline: deadline}
+		cmd.Stdin = cr
 		cmd.Stdout = nil
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
 		if err != nil {
 			fatalf("running %v: %s", args, err)
 		}
+		return cr.iters
 	}
 }
 
@@ -130,25 +167,25 @@ var zstdAvail = lookPath("zstd")
 var lz4Decompress = decompressCmdline("lz4", "-d", "-c")
 var lz4Avail = lookPath("lz4")
 
+var gzipDecompress = decompressCmdline("gzip", "-d", "-c")
+var gzipAvail = lookPath("gzip")
+
 func benchmark(c *compressor, data []byte) {
 	if !c.avail() {
 		logf("skipping %v (not available)\n", c.name)
 		return
 	}
 	compressed := c.compress(data)
-	iters := 0
-	wrote := 0
 	start := time.Now()
-	atleast := start.Add(3 * time.Second)
-	for iters == 0 || time.Now().Before(atleast) {
-		c.decompress(compressed)
-		wrote += len(data)
-		iters++
-	}
+	deadline := start.Add(3 * time.Second)
+	iters := c.decompress(compressed, deadline)
 	elapsed := time.Since(start)
 	ratio := float64(len(compressed)) / float64(len(data))
-	gibps := float64(wrote) / ((float64(elapsed) * (1024 * 1024 * 1024)) / float64(time.Second))
-	fmt.Printf("%s, %.2g, %.2g\n", c.name, ratio, gibps)
+	wrote := int64(len(data)) * int64(iters)
+
+	multiplier := float64(1024*1024*1024) / float64(time.Second)
+	gibps := float64(wrote) / (float64(elapsed) * multiplier)
+	fmt.Printf("%s, %.3g, %.3g\n", c.name, ratio, gibps)
 }
 
 var compressors = []compressor{
@@ -197,6 +234,18 @@ var compressors = []compressor{
 		avail:      lz4Avail,
 		compress:   compressCmdline("lz4", "-c", "-9"),
 		decompress: lz4Decompress,
+	},
+	{
+		name:       "gzip-9",
+		avail:      gzipAvail,
+		compress:   compressCmdline("gzip", "-c", "-9"),
+		decompress: gzipDecompress,
+	},
+	{
+		name:       "gzip-1",
+		avail:      gzipAvail,
+		compress:   compressCmdline("gzip", "-c", "-1"),
+		decompress: gzipDecompress,
 	},
 }
 
