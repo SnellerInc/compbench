@@ -25,6 +25,3 @@ so it should be smaller than the available memory,
 and large enough to effectively amortize the overhead of `exec`-ing
 the compressor and decompressor sub-processes.
 Files on the order of tens to hundreds of megabytes work well.
-
-The tool also accepts `-name=regexp` to limit running benchmarks
-to only those that match `regexp`.
